@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Stock - Taller Mecánico</title>
+  
+  <!-- Librería del Escáner de Código de Barras / QR -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Datos configurados con tu proyecto
+    const firebaseConfig = {
+      apiKey: "AIzaSyCljTQ53npaF1FBdEBf7PgNyumw_strKdI",
+      authDomain: "inventario-para-taller.firebaseapp.com",
+      projectId: "inventario-para-taller",
+      storageBucket: "inventario-para-taller.firebasestorage.app",
+      messagingSenderId: "1035842929200",
+      appId: "1:1035842929200:web:9a3673314b6277b4e923f5"
+    };
+
+    // Inicializar Firebase y Firestore
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let codigoLeido = "";
+
+    // Función que se ejecuta al detectar un código de barras
+    async function alEscanear(textoCodigo) {
+      codigoLeido = textoCodigo;
+      document.getElementById('panel-producto').style.display = 'block';
+      document.getElementById('txt-codigo').innerText = textoCodigo;
+      document.getElementById('txt-nombre').innerText = "Cargando datos...";
+      document.getElementById('txt-stock').innerText = "-";
+
+      try {
+        const docRef = doc(db, "inventario", textoCodigo);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          document.getElementById('txt-nombre').innerText = data.nombre;
+          document.getElementById('txt-stock').innerText = data.stock;
+        } else {
+          document.getElementById('txt-nombre').innerText = "Repuesto No Registrado";
+          document.getElementById('txt-stock').innerText = "0";
+        }
+      } catch (error) {
+        console.error("Error al consultar Firebase:", error);
+        alert("Error de conexión con la base de datos.");
+      }
+    }
+
+    // Función global para sumar o descontar stock
+    window.modificarStock = async function(cantidad) {
+      if (!codigoLeido) return;
+
+      const docRef = doc(db, "inventario", codigoLeido);
+      
+      try {
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          await updateDoc(docRef, { 
+            stock: increment(cantidad) 
+          });
+        } else {
+          const nombreNuevo = prompt("El repuesto no existe. Ingresa la descripción / nombre:") || "Sin Descripción";
+          const stockInicial = cantidad < 0 ? 0 : cantidad;
+          
+          await setDoc(docRef, { 
+            nombre: nombreNuevo, 
+            stock: stockInicial 
+          });
+        }
+
+        const actualizado = await getDoc(docRef);
+        document.getElementById('txt-nombre').innerText = actualizado.data().nombre;
+        document.getElementById('txt-stock').innerText = actualizado.data().stock;
+
+      } catch (error) {
+        console.error("Error al actualizar:", error);
+        alert("No se pudo guardar el cambio.");
+      }
+    };
+
+    // Inicializar la cámara del celular
+    let scanner = new Html5QrcodeScanner("lector-camara", { 
+      fps: 10, 
+      qrbox: { width: 250, height: 150 } 
+    });
+    scanner.render(alEscanear);
+  </script>
+
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f8f9fa; color: #333; }
+    h2 { text-align: center; color: #1a252f; font-size: 1.4rem; }
+    #lector-camara { width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card { background: #ffffff; border-radius: 10px; padding: 18px; margin-top: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-left: 5px solid #007bff; }
+    .card h3 { margin-top: 0; color: #007bff; font-size: 1.2rem; }
+    .info { font-size: 1rem; margin: 8px 0; }
+    .stock-destacado { font-size: 1.5rem; color: #28a745; font-weight: bold; }
+    .acciones { display: flex; gap: 10px; margin-top: 15px; }
+    button { flex: 1; padding: 12px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+    .btn-sumar { background-color: #28a745; color: white; }
+    .btn-sumar:active { background-color: #218838; }
+    .btn-restar { background-color: #dc3545; color: white; }
+    .btn-restar:active { background-color: #c82333; }
+  </style>
+</head>
+<body>
+
+  <h2>🔧 Inventario de Repuestos</h2>
+  
+  <div id="lector-camara"></div>
+
+  <div id="panel-producto" class="card" style="display:none;">
+    <h3 id="txt-nombre">Escanear repuesto...</h3>
+    <div class="info">Código: <b id="txt-codigo">--</b></div>
+    <div class="info">Stock en taller: <span id="txt-stock" class="stock-destacado">0</span> unidades</div>
+    
+    <div class="acciones">
+      <button class="btn-sumar" onclick="modificarStock(1)">+ Entrada</button>
+      <button class="btn-restar" onclick="modificarStock(-1)">- Consumo</button>
+    </div>
+  </div>
+
+</body>
+</html>
+
